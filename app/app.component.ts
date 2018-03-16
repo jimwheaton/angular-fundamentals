@@ -1,17 +1,14 @@
 import { Component } from "@angular/core";
+import { ForExample } from './components/for-example/for-example.component';
 
 @Component({
   selector: 'app-root',
   styleUrls: ['app.component.scss'],
   template: `
     <div class="app">
-      {{ title }}
+      <passenger-viewer></passenger-viewer>
     </div>
   `
 })
 export class AppComponent {
-  title: string;
-  constructor() {
-    this.title = 'Ultimate Angular';
-  }
 }
