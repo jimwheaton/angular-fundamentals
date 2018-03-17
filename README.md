@@ -80,3 +80,445 @@ The project uses `webpack` to build and compile all of our assets. This will do 
 - Allow us to use SASS for our component's CSS files
 - Provide the polyfills needed to run our app in all modern browsers
 - Mock a JSON backend using [json-server](https://github.com/typicode/json-server)
+
+
+# Angular Fundamentals Notes
+
+## Architecture
+
+#### Modules
+Building blocks that contain routes, components, services, and more
+#### Components
+Contains a template, data and logic, forming part of a DOM tree
+#### Directives 
+Attach behaviour, extend, or transform a particular element and its children
+##### Services
+Data layer, logic that is not component related, such as API requests
+#### Routing
+renders a component based on the URL state, drives navigation
+
+## Bootstrapping
+
+- create `AppComponent`with selector `app-root`. This gets placed in `index.html` as `<app-root>`
+- create `AppModule`, import `AppComponent` and tell this module to bootstrap `AppComponent`:
+```javascript
+// AppModule.ts
+@NgModule({
+  bootstrap: [AppComponent]
+})
+export class AppModule {}
+```
+- create `main.ts` and tell compiler to bootstrap our `AppModule`:
+```javascript
+// main.ts
+platformBrowserDynamic().bootstrapModule(AppModule)
+```
+
+## Template Fundamentals
+
+#### Property binding
+- use `[]` to do one way data-binding:
+```html
+<!-- Will bind to 'logo' property on Component class -->
+<img [src]="logo">
+```
+#### Event binding
+- use `()` to do one event binding:
+```html
+<input (blur)="handleBlur($event)">
+```
+#### Two way data binding
+Ok if you have a local component. However, when you want to emit a change, you should always use one way data flow and emit that change with an event listener.
+```html
+<!-- explicit -->
+<input type="text" [ngModel]="name" (ngModelChange)="handleChange" />
+
+<!-- implicit -->
+<input type="text" [(ngModel)]="name" />
+```
+```typescript
+class AppComponent {
+  name: string = 'Jim'
+  handleChange(value: string) {
+    this.name = value;
+  }
+}
+```
+
+#### Template #ref variables
+- allows us to create a reference to a particular DOM node which is available anywhere in our template. It essentially exports the properties of the DOM node on that variable
+```html
+<input type="text" #username />
+<button (click)="handleClick(username.value)">Template refs!</button>
+```
+
+## Rendering Flows
+- structural directives control DOM structure
+
+#### ngIf
+```html
+<div *ngIf="name">Your name is {{ name }}</div>
+```
+- the `*` character is syntactic sugar for `<template>` (holds client side content taht is not to be rendered when a page is loaded but may subsequently be instantiated during runtime using Javascript). The above snippet is identical to:
+```html
+<template [ngIf]="name">
+  <div>Your name is {{ name }}</div>
+</template>
+```
+
+#### ngFor
+```html
+<ul>
+  <li *ngFor="let passenger of passengers; let i = index;">
+    {{ i + 1 }} {{ passenger.fullname }}
+  </li>
+</ul>
+```
+- this expands to
+```html
+<ul>
+  <template ngFor let-passenger let-i="index" [ngForOf]="passengers">
+    <li>
+      Template {{ i + 1 }} {{ passenger.fullname }}
+    </li>
+  </template>
+</ul>
+```
+
+#### ngClass and className
+- can add `[class.my-class-name]="myBoolean"` to an element
+- or can use `ngClass` to and pass object:
+```html
+<span ngClass="{
+    'my-class-1': modelObj.isSelected,
+    'my-class-2': modelObj.foo
+  }"
+```
+
+#### ngStyle and style
+- note the CamelCasing on `backgroundColor` because it is a javascript equivalent
+```html
+<span [style.backgroundColor]="#2ecc71">With style</span>
+```
+- or pass an object to ngStyle
+```html
+<span [ngStyle]="{ backgroundColor: isLate ? 'red' : 'green' }">ngStyle<span>
+```
+
+#### Pipes for data transformation
+- think of them as functions that return you something new
+- can chain pipes
+
+#### Safe navigation operator
+- angular concept to guard against null and undefined values in property paths.
+- this is especially useful when making async calls where data won't be available right away.
+```html
+<span>The array has length {{ obj.myArray?.length }}</span>
+```
+
+## Component Architecture and Feature Modules
+
+#### Container / Smart and Presentational / Dumb Components
+- container components communicate with services and render child components. These are the main two things to think about when architecting angular apps
+- presentational components accept data via inputs and emit data changes via event outputs
+
+#### One way data flow
+- __Golden Rule__: data flows down, events emit up
+
+#### Feature modules with @NgModule
+- as we build out features in our app, we want to package them as feature modules
+- structure and naming convention
+```
+cool-feature ->
+  components ->
+    fill-buzz ->
+      fizz-buzz.component.ts
+  containers ->
+    cool-feature ->
+      cool-feature.component.ts
+      cool-feature.component.scss
+  models ->
+    cool-feature.interface.ts
+  cool-feature.module.ts
+```
+- in `my-cool-feature.module.ts` we need to declare our components and make sure to export them if we want them to be used in other modules:
+```typescript
+@NgModule({
+  declarations: [
+    MyCoolContainer,
+    MyCoolPresentationComponent
+  ],
+  exports: [
+    MyCoolContainer
+  ]
+})
+```
+
+#### Container components
+- fundamental characteristics are contains things like data and renders stateless child components
+- often are the only component exported from a module
+
+#### ngOnInit lifecycle hook
+- called when the component is ready.
+- logic such as data fetching should be put in here, not in `constructor`. 
+
+#### Passing data into components with @Input
+- need to create property on receiving component
+```typescript
+import { Component, Input } from '@angular/core';
+
+export class MyComponent {
+  @Input()
+  items: any[] 
+}
+```
+
+#### Emitting changes with @Output and EventEmitter
+- think of your component as an API. We can pass data into it, we can mutate it (immutably), then pass it back up to the parent.
+```typescript
+@Component({
+  template: '<employee (edit)="handleEdit($event)"></employee>'
+})
+export class EmployeeDashboard {
+  handleEdit(event) {}
+}
+
+import { Component, Input, Output, EventEmitter } from '@angular/core';
+
+@Component({
+  selector: 'employee',
+  template: ```<button (click)="onEdit()">Edit</button>```
+})
+export class Employee {
+  edit: EventEmitter<any> = new EventEmitter();
+  
+  onEdit() {
+    this.edit.emit('Joe');
+  }
+}
+```
+
+#### Immutable state changes
+- use array functions like `filter` and `map`, since they return a new array
+- use `Object.assign({}, oldObj, diffObj)` for objects
+- use `ngOnChanges(changes)` hook to implement a component with local state
+
+#### ngOnChanges lifecycle hook
+- Lifecycle hook that is called when any data-bound property of a directive changes.
+- __Gets called before `ngOnInit()`__. The data bindings are available at this point, so we can use this hook to make clones of any objects passed in, making it immutable. This essentially creates local state on the component.
+
+```typescript
+ngOnChanges(changes) {
+  if (changes.myProp) {
+    this.myProp = Object.assign({}, changes.myProp.currentValue)
+  }
+}
+```
+
+## Services, Http and Observables
+
+#### Data Services and Dependency Injection
+- services must be declared in `@NgModule` in the `providers` array:
+```typescript
+import { MyService } from './services/my-service';
+
+@NgModule({
+  providers: [MyService]
+})
+```
+- services are injected through constructor. There is a shorthand for assigning a service to an instance variable:
+```typescript
+constructor(private service: MyService) {} //creates a this.service variable
+```
+
+#### @Injectable
+- tells angular that whatever is decorated can have dependencies injected. This is useful for services that have dependencies (or as best practice / consistency, used with ALL services)
+```typescript
+import { Injectable } from '@angular/core';
+import { Http } from '@angular/http';
+
+@Injectable()
+export class MyService {
+  constructor(private http: Http) {}
+}
+```
+
+#### Http data fetching, updating, and deleting with Observables
+- in the service wrapping `Http`, we'll be returning `rxjs/Observables`.
+- in the comsuming components, we may need to make use of the Safe Navigation Operator (`?`) to deal with undefined/null before aync call has finished
+```typescript
+import { Http, Response } from "@angular/http";
+import { Observable} from 'rxjs/Observable';
+import 'rxjs/add/operator/map';
+
+...
+  getData(): Observable<MyModel[]> {
+    return this.http
+      .get('api/somedata')
+      .map((response: Response) => response.json());
+  }
+  
+  updateData(someData: MyModel): Observable<MyModel> {
+    return this.http
+      .put('api/somedata/${someData.id}', someData)  // ' should be backticks
+      .map((response: Response) => response.json());
+  }
+  
+  deleteData(someData: MyModel): Observable<MyModel> {
+    return this.http
+      .delete('api/somedata/${someData.id}')
+      .map((response: Response) => response.json());
+  }
+```
+
+#### Observable.catch error handling
+```typescript
+import 'rxjs/add/operator/catch';
+import 'rxjs/add/observable/throw';
+...
+  getData(): Observable<MyModel[]> {
+    return this.http
+      .get('api/somedata')
+      .map((response: Response) => response.json())
+      .catch((error: any) => Observable.throw(error.json()));
+  }
+...
+
+```
+- then in consumer
+```typescript
+  this.myService
+      .getData()
+      .subscribe(
+        (data: Passenger[]) => this.passengers = data,
+        (error: any) => console.log('boom')
+      );
+```
+
+#### Custom Headers and RequestOptions
+```typescript
+import { Http, Response, RequestOptions, Headers } from "@angular/http";
+import { Observable} from 'rxjs/Observable';
+import 'rxjs/add/operator/map';
+
+...
+  updateData(someData: MyModel): Observable<MyModel> {
+    let headers = new Headers({
+      'Content-Type': 'application/json'
+    });
+    let options = new RequestOptions({
+      headers: headers
+    });
+    return this.http
+      .put('api/somedata/${someData.id}', someData, options)  // ' should be backticks
+      .map((response: Response) => response.json());
+  }
+...
+```
+#### Http Promises alternative
+- recommend using Observables over Promises, but if you want to this is how:
+```typescript
+import 'rxjs/add/operator/toPromise';
+
+...
+  getData(): Promise<MyModel[]> {
+    return this.http
+      .get('api/somedata')
+      .toPromise()
+      .then((response: Response) => response.json());
+  }
+```
+
+## Template-driven Forms
+- on a `<form>` element, use a template ref to export `ngForm`:
+```html
+<form #myForm="ngForm" novalidate>
+  {{ myForm.value | json }}
+</form>
+```
+- `ngForm` is a directive which keeps track of all of the state changes and all of the validation of the form inputs
+- setting the `name` attribute on a control will add it to the form template model:
+```html
+<input name="firstName">
+{{ myForm.firstName }}
+```
+- in a template driven form, __the template is the source of truth__ and not your data model
+- `ngModel` can be set on the input controls to bind the input value to a model value
+
+#### Input
+```html
+<input type="text" name="firstName" [ngModel]="employee?.firstName">
+```
+
+#### Radio
+- radio inputs with the same `name` will form a group
+```html
+<div>
+  <label>
+    <input 
+      type="radio" 
+      name="fullTime"
+      [value]="true"
+      [ngModel]="employee?.fullTime"
+      (ngModelChange)="toggleFullTime($event)">
+      Full-time
+  </label>
+  <label>
+    <input 
+      type="radio" 
+      name="fullTime"
+      [value]="false"
+      [ngModel]="employee?.fullTime"
+      (ngModelChange)="toggleFullTime($event)">
+      Part-time
+  </label>
+</div> 
+```
+
+#### Checkbox
+```html
+<label>
+  <input 
+    type="checkbox" 
+    name="fullTime"
+    [ngModel]="employee?.fullTime"
+    (ngModelChange)="toggleFullTime($event)">
+    Full-time
+</label>
+```
+
+#### Select
+- two approaches for setting selected option. Option 1 is more explicit (recommended). `ngValue` is short-hand for option 1
+```typescript
+class EmployeeEditor {
+  genders: Gender[] = [{
+    key: 'male',
+    value: 'Male'
+  } ... ]
+}
+```
+```html
+Option 1
+<select 
+  name="gender"
+  [ngModel]="employee?.gender">
+  <option
+    *ngFor="let gender of genders"
+    [value]="gender.key"
+    [selected]="gender.key === employee?.gender">
+    {{ gender.value }}
+  </option>
+</select>
+
+Option 2
+<select 
+  name="gender"
+  [ngModel]="employee?.gender">
+  <option
+    *ngFor="let gender of genders"
+    [ngValue]="gender.key">
+    {{ gender.value }}
+  </option>
+</select>
+```
+
