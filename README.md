@@ -159,7 +159,7 @@ class AppComponent {
 ```html
 <div *ngIf="name">Your name is {{ name }}</div>
 ```
-- the `*` character is syntactic sugar for `<template>` (holds client side content taht is not to be rendered when a page is loaded but may subsequently be instantiated during runtime using Javascript). The above snippet is identical to:
+- the `*` character is syntactic sugar for `<template>` (holds client side content taht is not to be rendered when a page is loaded but may subsequently be instantiated during runtime using Javascript). In Angular5, `<template>` is now `<ng-template>`. The above snippet is identical to:
 ```html
 <template [ngIf]="name">
   <div>Your name is {{ name }}</div>
@@ -277,7 +277,7 @@ export class MyComponent {
 - think of your component as an API. We can pass data into it, we can mutate it (immutably), then pass it back up to the parent.
 ```typescript
 @Component({
-  template: '<employee (edit)="handleEdit($event)"></employee>'
+  template: `<employee (edit)="handleEdit($event)></employee>`
 })
 export class EmployeeDashboard {
   handleEdit(event) {}
@@ -287,13 +287,14 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 
 @Component({
   selector: 'employee',
-  template: ```<button (click)="onEdit()">Edit</button>```
+  template: `<button (click)="onEdit()`>Edit</button>
 })
 export class Employee {
-  edit: EventEmitter<any> = new EventEmitter();
+  @Output()
+  edit: EventEmitter<Employee> = new EventEmitter<Employee>();
   
   onEdit() {
-    this.edit.emit('Joe');
+    this.edit.emit(this);
   }
 }
 ```
@@ -344,6 +345,7 @@ export class MyService {
 ```
 
 #### Http data fetching, updating, and deleting with Observables
+- In Angular5, `Http` is now `HttpClient`
 - in the service wrapping `Http`, we'll be returning `rxjs/Observables`.
 - in the comsuming components, we may need to make use of the Safe Navigation Operator (`?`) to deal with undefined/null before aync call has finished
 ```typescript
@@ -430,19 +432,26 @@ import 'rxjs/add/operator/toPromise';
 ```
 
 ## Template-driven Forms
-- on a `<form>` element, use a template ref to export `ngForm`:
+- on a `<form>` element, use a template ref to reference `ngForm`, which is a directive which keeps track of all of the state changes and all of the validation of the form inputs:
 ```html
 <form #myForm="ngForm" novalidate>
   {{ myForm.value | json }}
 </form>
 ```
-- `ngForm` is a directive which keeps track of all of the state changes and all of the validation of the form inputs
+- on an input element, we can use a template ref to reference `ngModel`, which also keeps track of validation for an input. We add validation to the input such as `required` and Angular will automatically tie this into `ngModel`:
+```html
+<input 
+  type="text" 
+  #myInput="ngModel"
+  required>
+{{ myInput.errors | json }}
+```
 - setting the `name` attribute on a control will add it to the form template model:
 ```html
 <input name="firstName">
 {{ myForm.firstName }}
 ```
-- in a template driven form, __the template is the source of truth__ and not your data model
+- in a template driven form, __the template is the source of truth__, not your data model
 - `ngModel` can be set on the input controls to bind the input value to a model value
 
 #### Input
@@ -521,4 +530,229 @@ Option 2
   </option>
 </select>
 ```
+#### Validation
+```html
+<form #form="ngForm" novalidate>
+  <input 
+    type="text"
+    name="fullname"
+    required
+    #fullname="ngModel"
+    [ngModel]="person?.fullname">
+  <div 
+    *ngIf="fullname.errors?.required && fullname.dirty"
+    class="error">
+    Passenger name is required
+  </div>
 
+  <button type="submit" [disabled]="form.invalid">
+    Update passenger
+  </button>
+</form>
+```
+
+#### Form submission
+```html
+<form
+  #form="ngForm"
+  novalidate
+  (ngSubmit)="handleSubmit(form.value, form.isValid)">
+  ...
+```
+```typescript
+class MyClass  
+  
+  @Output()
+  update: EventEmitter<MyModel> = new EventEmitter<MyModel>();
+  
+  handleSubmit(myModel: MyModel, isValid: boolean) {
+    if (isValid) {
+      this.update.emit(myModel)
+    }
+  }
+```
+
+## Component Routing
+- Need to include `<base>` tag in `index.html` for routing to work:
+```html
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <base href="/">
+    ...
+```
+#### Root module routes and outlet
+- configure routing in `AppModule`
+```typescript
+import { RouterModule, Routes } from '@angular/router';
+
+const routes: Routes = [
+  { path: '', component: HomeComponent, pathMatch: 'full' },
+  { path: '**', component: NotFoundComponent }
+]
+
+@NgModule({
+  imports: [
+    RouterModule.forRoot(routes)
+  ]
+})
+export class AppModule {}
+```
+- add `<router-outlet>` to `AppComponent`
+```typescript
+@Component({
+  selector: 'app-root',
+  template: `
+    <div class="app">
+      <router-outlet></router-outlet>
+    </div>
+  `
+})
+```
+#### Routerlink
+- on `/` route, specify exact match, otherwise it will match all routes
+- `routerLinkActive` specifies the active CSS class, which is dynamically added when the route is active
+```html
+<nav class="nav">
+  <a
+    routerLink="/"
+    routerLinkActive="active"
+    [routerLinkActiveOptions]="{ exact: true }">
+    Home
+  </a>
+  <a
+    routerLink="/employees"
+    routerLinkActive="active">
+    Employees
+  </a>
+```
+- a better approach is to dynamically build nav
+```typescript
+interface Nav {
+  link: string,
+  name: string,
+  exact: boolean
+};
+
+@Component({
+  selector: 'app-root',
+  template: `
+    <nav class="nav">
+      <a
+        *ngFor="let item of nav"
+        [routerLink]="item.link"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: item.exact }">
+        {{ item.name }}
+      </a>
+  `
+})
+export class AppComponent {
+  nav: Nav[] = [
+    {
+      link: '/',
+      name: 'Home',
+      exact: true
+    },
+    {
+      link: '/employees',
+      name: 'Employees',
+      exact: false
+    }
+  ];
+}
+```
+#### Feature module routes with forChild()
+- in feature module, define routes. You may be able to drop all the exports because parent componet will likely not be rendering child components explictly and instead will rely on the router to populate `<router-outlet>`
+```typescript
+import { RouterModule, Routes } from '@angular/router';
+
+const routes: Routes = [
+  { 
+    path: 'employees', 
+    children: [
+      { path: '', component: EmployeeDashboardComponent },
+      { path: ':id', component: EmployeeViewerComponent }
+    ]
+  }
+];
+
+@NgModule({
+  imports: [
+    RouterModule.forChild(routes)
+  ]
+})
+export class EmployeeModule {}
+```
+- to use the route params with data-fetching, use `switchMap`, which will switch to the inner observable whenever the outer observable emits an event
+```typescript
+import { Router, ActivatedRoute, Params } from '@angular/router';
+import 'rxjs/add/operator/switchMap';
+
+@Component({
+...
+})
+export class EmployeeViewComponent {
+  constructor(
+    private route: ActivatedRoute,
+    private employeeService: EmployeeService
+  ) {}
+  
+  ngOnInit() {
+    this.route.params
+      .switchMap((data: Employee) => this.employeeService.getPassenger(data.id))
+      .subscribe((data: Employee) => this.employee = data);
+  }
+}
+```
+#### Imperative routing API
+- stateless component emits an event, for example when clicking on 'View'
+```typescript
+@Component({
+  selector: 'employee-summary',
+  template: `
+    <button (click)="viewEmployee()">View</button>
+  `
+})
+export class EmployeeSummaryComponent {
+  @Input()
+  employee: Employee
+  
+  @Output()
+  view: EventEmitter<Employee> = new EventEmitter<Employee>();
+  
+  viewEmployee() {
+    this.view.emit(this.employee);
+  }
+}
+```
+- container component subscribes to this event and explictly calls router
+```typescript
+@Component({
+  selector: 'employee-dashboard',
+  template: `
+    <employee-summary
+      (view)="onViewEmployee($event)">
+    </employee-summary>
+  `
+})
+export class EmployeeDashboardComponent() {
+  constructor(private router: Router) {}
+  
+  onViewEmployee(event: Employee) {
+    this.router.navigate(['/employees', event.id]);
+  }
+}
+```
+#### Hash location strategy vs push location strategy
+- enable by specifying `RouterModule.forRoot(routes, { useHash: true })`
+- "push" requires server side configuration, but sets us up to use server side rendering ("hash" strategy doesn't support this)
+- "push" uses `history.pushState()`
+- "hash" supports older browsers
+
+#### Redirects
+```typescript
+const routes: Routes = [
+  { path: '', redirectTo: 'employees', pathMatch: 'full'}
+]
+```
